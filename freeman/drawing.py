@@ -1,4 +1,4 @@
-"""Module responsible for rendering graph visualizations.
+'''Module responsible for rendering graph visualizations.
 
 The visualizations are powered by two different libraries, `pyvis
 <https://pyvis.readthedocs.io/en/latest/>`_ and `Plotly
@@ -7,11 +7,11 @@ possible across these libraries.
 
 The functions and classes require nodes to be *positioned*: given a graph **g**
 and a node **n** of this graph, the attribute **g.nodes[n]['pos']** must be a
-tuple or list of two numbers between ``0`` and ``1``. To ensure these
-attributes, use the functions from the :ref:`Moving <moving>` module or wrap
-with the :func:`Graph <freeman.Graph>` class.
+tuple or list of two numbers. To ensure these attributes, use the functions from
+the :ref:`Moving <moving>` module or wrap with the :func:`Graph <freeman.Graph>`
+class.
 
-The appearance is based on the eighteen visual attributes below.
+The appearance is based on the twenty three visual attributes below.
 
 
 .. _visual-attributes:
@@ -19,7 +19,7 @@ The appearance is based on the eighteen visual attributes below.
 Visual attributes
 -----------------
 
-Given a graph **g**, the six attributes below can be used for customizing the
+Given a graph **g**, the eight attributes below can be used for customizing the
 appearance of this graph. When the attribute does not exist, its default value
 is considered.
 
@@ -28,20 +28,37 @@ is considered.
 
 **g.graph['height']**  Graph height, in pixels. Must be positive. Default value is ``450``.
 
-**g.graph['bottom']**  Bottom padding, in pixels. Must be non-negative. Default value is ``0``.
+**g.graph['bottom']**  Graph bottom padding, in pixels. Must be non-negative. Default value is
+                       ``0``.
 
-**g.graph['left']**    Left padding, in pixels. Must be non-negative. Default value is ``0``.
+**g.graph['left']**    Graph left padding, in pixels. Must be non-negative. Default value is
+                       ``0``.
 
-**g.graph['right']**   Right padding, in pixels. Must be non-negative. Default value is ``0``.
+**g.graph['right']**   Graph right padding, in pixels. Must be non-negative. Default value is
+                       ``0``.
 
-**g.graph['top']**     Top padding, in pixels. Must be non-negative. Default value is ``0``.
+**g.graph['top']**     Graph top padding, in pixels. Must be non-negative. Default value is
+                       ``0``.
+
+**g.graph['awidth']**  Graph axis width, in pixels. Must be non-negative. Default value is
+                       ``0``. Ignored by :func:`interact <freeman.drawing.interact>`.
+
+**g.graph['acolor']**  Graph axis color, as a tuple or list of three integers between ``0`` and
+                       ``255`` representing red, green, and blue levels, respectively. Default
+                       value is ``(127, 127, 127)``. Ignored by
+                       :func:`interact <freeman.drawing.interact>`.
 =====================  =
 
-Given a graph **g** and a node **n** of this graph, the six attributes below can
-be used for customizing the appearance of this node. When the attribute does not
-exist, its default value is considered.
+Given a graph **g** and a node **n** of this graph, the eight attributes below
+can be used for customizing the appearance of this node. When the attribute does
+not exist, its default value is considered.
 
 ========================  =
+**g.nodes[n]['label']**   Node label, either ``None`` or a string. Default value is ``None``.
+
+**g.nodes[n]['extra']**   Node secondary label, either ``None`` or a string. Default value is
+                          ``None``. Ignored by :func:`interact <freeman.drawing.interact>`.
+
 **g.nodes[n]['size']**    Node size, in pixels. Must be positive. Default value is ``20``.
 
 **g.nodes[n]['style']**   Node style, one of: ``'circle'``, ``'star'``, ``'square'``,
@@ -62,14 +79,16 @@ exist, its default value is considered.
 **g.nodes[n]['labpos']**  Node label position, either ``'hover'`` or ``'<vpos> <hpos>'``, where
                           ``<vpos>`` is ``bottom``, ``middle``, or ``top``, and ``<hpos>`` is
                           ``left``, ``center``, or ``right``. Default value is ``'middle
-                          center'``.
+                          center'``. Ignored by :func:`interact <freeman.drawing.interact>`.
 ========================  =
 
-Given a graph **g** and an edge **(n, m)** of this graph, the six attributes
+Given a graph **g** and an edge **(n, m)** of this graph, the seven attributes
 below can be used for customizing the appearance of this edge. When the
 attribute does not exist, its default value is considered.
 
 ============================  =
+**g.edges[n, m]['label']**    Edge label, either ``None`` or a string. Default value is ``None``.
+
 **g.edges[n, m]['width']**    Edge width, in pixels. Must be positive. Default value is ``1``.
 
 **g.edges[n, m]['style']**    Edge style, one of ``'solid'``, ``'dash'``, ``'dot'``, or
@@ -81,17 +100,20 @@ attribute does not exist, its default value is considered.
                               representing opacity. Default value is ``(0, 0, 0)``.
 
 **g.edges[n, m]['labflip']**  Whether the label should be positioned to the right of the edge
-                              instead of the left. Default value is ``False``.
+                              instead of the left. Default value is ``False``. Ignored by
+                              :func:`interact <freeman.drawing.interact>`.
 
 **g.edges[n, m]['labdist']**  Distance from edge to label, in pixels. Must be non-negative.
-                              Default value is ``10``.
+                              Default value is ``10``. Ignored by :func:`interact
+                              <freeman.drawing.interact>`.
 
 **g.edges[n, m]['labfrac']**  Where the label should be positioned between the two nodes. The
                               closer the value is to ``0``, the closer the label is to the
                               source. The closer the value is to ``1``, the closer the label is
-                              to the target. Default value is ``0.5``.
+                              to the target. Default value is ``0.5``. Ignored by
+                              :func:`interact <freeman.drawing.interact>`.
 ============================  =
-"""
+'''
 import os
 import plotly
 
@@ -133,6 +155,8 @@ graph_bottom = 0
 graph_left = 0
 graph_right = 0
 graph_top = 0
+graph_awidth = 0
+graph_acolor = (127, 127, 127)
 
 node_size = 20
 node_style = 'circle'
@@ -179,17 +203,34 @@ def _correct(c):
     return sc / 12.92
 
 
+def _toodark(color):
+    r = _correct(color[0])
+    g = _correct(color[1])
+    b = _correct(color[2])
+
+    contrast = (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05)**2
+
+    return contrast < 0.0525
+
+
 def _convert(color):
     r = color[0]
     g = color[1]
     b = color[2]
 
     if len(color) == 4:
-        a = color[3]
+        a = round(color[3], 6)
 
         return 'rgba({}, {}, {}, {})'.format(r, g, b, a)
 
     return 'rgb({}, {}, {})'.format(r, g, b)
+
+
+def _normalize(value, lower, delta):
+    if isclose(delta, 0):
+        return 0.5
+
+    return (value - lower) / delta
 
 
 def _build_graph_width(g):
@@ -212,7 +253,37 @@ def _build_graph_height(g):
     return height
 
 
-def _build_graph_padding(g):
+def _build_graph_plane(g):
+    if g.number_of_nodes() == 0:
+        return None, (0.5, 0.5)
+
+    X = []
+    Y = []
+    for n in g.nodes:
+        if 'pos' not in g.nodes[n]:
+            raise KeyError('node must have a pos')
+        pos = g.nodes[n]['pos']
+        if not isinstance(pos, (tuple, list)):
+            raise TypeError('node pos must be a tuple or list')
+        if len(pos) != 2:
+            raise ValueError('node pos must have exactly two elements')
+        if not isinstance(pos[0], (int, float)) or not isinstance(pos[1], (int, float)):
+            raise TypeError('both node pos elements must be numeric')
+        X.append(pos[0])
+        Y.append(pos[1])
+
+    xmin = min(X)
+    xdif = max(X) - xmin
+    ymin = min(Y)
+    ydif = max(Y) - ymin
+
+    x = _normalize(0, xmin, xdif)
+    y = _normalize(0, ymin, ydif)
+
+    return (xmin, xdif, ymin, ydif), (x, y)
+
+
+def _build_graph_key(g):
     bottom = g.graph.get('bottom', graph_bottom)
     if not isinstance(bottom, int):
         raise TypeError('graph bottom must be an integer')
@@ -237,50 +308,50 @@ def _build_graph_padding(g):
     if top < 0:
         raise ValueError('graph top must be non-negative')
 
-    return bottom, left, right, top
+    awidth = g.graph.get('awidth', graph_awidth)
+    if not isinstance(awidth, int):
+        raise TypeError('graph awidth must be an integer')
+    if awidth < 0:
+        raise ValueError('graph awidth must be non-negative')
+
+    acolor = g.graph.get('acolor', graph_acolor)
+    if not isinstance(acolor, (tuple, list)):
+        raise TypeError('graph acolor must be a tuple or list')
+    if len(acolor) != 3:
+        raise ValueError('graph acolor must have exactly three elements')
+    if not isinstance(acolor[0], int) or not isinstance(acolor[1], int) or not isinstance(acolor[2], int):
+        raise TypeError('all graph ncolor elements must be integers')
+    if acolor[0] < 0 or acolor[0] > 255 or acolor[1] < 0 or acolor[1] > 255 or acolor[2] < 0 or acolor[2] > 255:
+        raise ValueError('all graph ncolor elements must be between 0 and 255')
+
+    return bottom, left, right, top, awidth, acolor
 
 
-def _build_graph_key(g):
-    width = _build_graph_width(g)
-    height = _build_graph_height(g)
+def _build_graph_pos(g, bounds):
+    pos = {}
 
-    bottom, left, right, top = _build_graph_padding(g)
+    if bounds is not None:
+        xmin, xdif, ymin, ydif = bounds
 
-    return width, height, bottom, left, right, top
-
-
-def _get_node_pos(g, n):
-    if 'pos' not in g.nodes[n]:
-        raise KeyError('node must have a pos')
-    pos = g.nodes[n]['pos']
-    if not isinstance(pos, (tuple, list)):
-        raise TypeError('node pos must be a tuple or list')
-    if len(pos) != 2:
-        raise ValueError('node pos must have exactly two elements')
-    if not isinstance(pos[0], (int, float)) or not isinstance(pos[1], (int, float)):
-        raise TypeError('both node pos elements must be numeric')
-    if pos[0] < 0 or pos[0] > 1 or pos[1] < 0 or pos[1] > 1:
-        raise ValueError('both node pos elements must be between 0 and 1')
+        for n in g.nodes:
+            x, y = g.nodes[n]['pos']
+            x = _normalize(x, xmin, xdif)
+            y = _normalize(y, ymin, ydif)
+            pos[n] = (x, y)
 
     return pos
 
 
-def _build_node_size(g, n):
+def _build_node_key(g, n):
     size = g.nodes[n].get('size', node_size)
     if not isinstance(size, int):
         raise TypeError('node size must be an integer')
     if size <= 0:
         raise ValueError('node size must be positive')
 
-    return size
-
-
-def _build_node_key(g, n):
-    size = _build_node_size(g, n)
-
     style = g.nodes[n].get('style', node_style)
     if style not in NODE_STYLES:
-        raise KeyError('node style must be one of the following: ' + ', '.join('"{}"'.format(s) for s in NODE_STYLES))
+        raise KeyError('node style must be one of the following: ' + ', '.join('\'{}\''.format(s) for s in NODE_STYLES))
 
     color = g.nodes[n].get('color', node_color)
     if not isinstance(color, (tuple, list)):
@@ -312,22 +383,22 @@ def _build_node_key(g, n):
     if not isinstance(labpos, str):
         raise TypeError('node labpos must be a string')
     if labpos != 'hover':
-        words = labpos.split(' ')
+        words = labpos.split()
         if len(words) != 2:
-            raise ValueError('node labpos must be "hover" or a vertical position and an horizontal position separated by a space')
+            raise ValueError('node labpos must be \'hover\' or a vertical position and an horizontal position separated by a space')
         vpos = ['bottom', 'middle', 'top']
         if words[0] not in vpos:
-            raise KeyError('node vertical position must be one of the following: ' + ', '.join('"{}"'.format(v) for v in vpos))
+            raise KeyError('node vertical position must be one of the following: ' + ', '.join('\'{}\''.format(v) for v in vpos))
         hpos = ['left', 'center', 'right']
         if words[1] not in hpos:
-            raise KeyError('node horizontal position must be one of the following: ' + ', '.join('"{}"'.format(h) for h in hpos))
+            raise KeyError('node horizontal position must be one of the following: ' + ', '.join('\'{}\''.format(h) for h in hpos))
 
     return size, style, color, bwidth, bcolor, labpos
 
 
 def _build_edge_key(g, n, m):
-    n_size = _build_node_size(g, n)
-    m_size = _build_node_size(g, m)
+    n_size = g.nodes[n].get('size', node_size)
+    m_size = g.nodes[m].get('size', node_size)
 
     width = g.edges[n, m].get('width', edge_width)
     if not isinstance(width, int):
@@ -337,7 +408,7 @@ def _build_edge_key(g, n, m):
 
     style = g.edges[n, m].get('style', edge_style)
     if style not in EDGE_STYLES:
-        raise KeyError('edge style must be one of the following: ' + ', '.join('"{}"'.format(s) for s in EDGE_STYLES))
+        raise KeyError('edge style must be one of the following: ' + ', '.join('\'{}\''.format(s) for s in EDGE_STYLES))
 
     color = g.edges[n, m].get('color', edge_color)
     if not isinstance(color, (tuple, list)):
@@ -372,7 +443,24 @@ def _build_edge_key(g, n, m):
     return n_size, m_size, width, style, color, labflip, labdist, labfrac
 
 
-def _build_node_trace(size, style, color, bwidth, bcolor, labpos):
+def _build_graph_trace(g, origin, awidth, acolor):
+    return {
+        'x': [origin[0], origin[0], None, 0, 1, None],
+        'y': [0, 1, None, origin[1], origin[1], None],
+        'hoverinfo': 'none',
+        'mode': 'lines',
+        'line': {
+            'width': awidth,
+            'dash': 'solid',
+            'color': _convert(acolor),
+        },
+    }
+
+
+def _build_node_trace(size, style, color, bwidth, bcolor, labpos, hidden):
+    if hidden and labpos == 'hover':
+        labpos = 'middle center'
+
     if labpos == 'hover':
         hoverinfo = 'text'
         mode = 'markers'
@@ -382,15 +470,13 @@ def _build_node_trace(size, style, color, bwidth, bcolor, labpos):
         mode = 'markers+text'
         textposition = labpos
 
-    textcolor = (0, 0, 0)
-
-    if labpos == 'middle center':
-        r = _correct(color[0])
-        g = _correct(color[1])
-        b = _correct(color[2])
-
-        if (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05)**2 < 0.0525:
+    if hidden:
+        textcolor = (255, 255, 255, 0)
+    else:
+        if textposition == 'middle center' and _toodark(color):
             textcolor = (255, 255, 255)
+        else:
+            textcolor = (0, 0, 0)
 
     return {
         'x': [],
@@ -423,11 +509,25 @@ def _build_node_label_trace(width, height, bottom, left, right, top):
         'marker': {
             'size': 0,
             'symbol': 'circle',
-            'color': 'rgba(255, 255, 255, 0.0)',
+            'color': 'rgba(255, 255, 255, 0)',
             'line': {
                 'width': 0,
-                'color': 'rgba(255, 255, 255, 0.0)',
+                'color': 'rgba(255, 255, 255, 0)',
             },
+        },
+    }
+
+
+def _build_node_extra_trace(color):
+    return {
+        'x': [],
+        'y': [],
+        'text': [],
+        'hoverinfo': 'none',
+        'mode': 'text',
+        'textposition': 'middle center',
+        'textfont': {
+            'color': _convert(color),
         },
     }
 
@@ -481,21 +581,36 @@ def _build_layout(width, height):
             'zeroline': False,
             'showticklabels': False,
         },
+        'plot_bgcolor': 'rgb(255, 255, 255)',
     }
 
 
-def _add_node(g, n, node_trace):
-    x, y = _get_node_pos(g, n)
-    text = g.nodes[n].get('label', None)
+def _add_node(g, n, pos, node_trace, node_extra_trace, labpos):
+    x, y = pos[n]
+    text = get_node_label(g, n)
 
     node_trace['x'].append(x)
     node_trace['y'].append(y)
     node_trace['text'].append(text)
 
+    extra = g.nodes[n].get('extra', None)
+    if extra is not None:
+        if not isinstance(extra, str):
+            raise TypeError('node extra must be a string')
+        if text is None:
+            raise ValueError('node extra must not exist if node label exists')
+        else:
+            if labpos == 'middle center':
+                raise ValueError('node extra and node label must not have the same position')
 
-def _add_edge(g, n, m, edge_trace, edge_label_trace, width, height, n_size, m_size, labflip, labdist, labfrac):
-    x0, y0 = _get_node_pos(g, n)
-    x1, y1 = _get_node_pos(g, m)
+    node_extra_trace['x'].append(x)
+    node_extra_trace['y'].append(y)
+    node_extra_trace['text'].append(extra)
+
+
+def _add_edge(g, n, m, pos, edge_trace, edge_label_trace, width, height, n_size, m_size, labflip, labdist, labfrac):
+    x0, y0 = pos[n]
+    x1, y1 = pos[m]
 
     # parameters estimated from screenshots
     width = 0.9 * width - 24
@@ -522,7 +637,7 @@ def _add_edge(g, n, m, edge_trace, edge_label_trace, width, height, n_size, m_si
     sx, sy = _scale(dx, dy, width, height, labdist)
     edge_label_trace['x'].append(x0 + labfrac * (x1 - x0) + sx)
     edge_label_trace['y'].append(y0 + labfrac * (y1 - y0) + sy)
-    edge_label_trace['text'].append(g.edges[n, m].get('label', None))
+    edge_label_trace['text'].append(get_edge_label(g, n, m))
 
     if isinstance(g, nx.DiGraph):
         dx = x0 - x1
@@ -549,8 +664,24 @@ def _add_edge(g, n, m, edge_trace, edge_label_trace, width, height, n_size, m_si
             edge_trace['y'].extend([y0, y1, None])
 
 
-def interact(g, path=None, physics=False):
-    """Render an interactive visualization of a graph.
+def get_node_label(g, n):
+    label = g.nodes[n].get('label', None)
+    if label is not None and not isinstance(label, str):
+        raise TypeError('node label must be a string')
+
+    return label
+
+
+def get_edge_label(g, n, m):
+    label = g.edges[n, m].get('label', None)
+    if label is not None and not isinstance(label, str):
+        raise TypeError('edge label must be a string')
+
+    return label
+
+
+def interact(g, physics=False, path=None):
+    '''Render an interactive visualization of a graph.
 
     The visualization is powered by `pyvis
     <https://pyvis.readthedocs.io/en/latest/>`_, based on the :ref:`visual
@@ -561,22 +692,37 @@ def interact(g, path=None, physics=False):
     rendered as a single edge with two heads. Such rendering is better for
     interaction, but less faithful to the graph density.
 
+    The graph attributes **awidth** and **acolor**, the node attributes
+    **extra** and **labpos**, and the edge attributes **labflip**, **labdist**,
+    and **labfrac** are ignored. A node label is only shown when the mouse is
+    over the node, node secondary labels are not shown at all, and an edge label
+    is only shown when the mouse is over the edge. Less clutter is better for
+    interaction.
+
     The visualization must be saved to an HTML file.
 
     :type g: NetworkX Graph or DiGraph
     :param g: The graph to visualize.
 
+    :type physics: bool
+    :param physics: Whether to enable the physics simulation.
+
     :type path: str
     :param path: Path of the HTML file. If ``None``, the visualization is saved to
                  ``'__fmcache__/<id>.html'``, where ``<id>`` is the `identity
                  <https://docs.python.org/3/library/functions.html#id>`_ of the graph.
+    '''
+    if not isinstance(physics, bool):
+        raise TypeError('interact physics must be a boolean')
 
-    :type physics: bool
-    :param physics: Whether to enable the physics simulation.
-    """
-    local_width, local_height, local_bottom, local_left, local_right, local_top = _build_graph_key(g)
-    dx = local_left + local_right
-    dy = local_bottom + local_top
+    local_width = _build_graph_width(g)
+    local_height = _build_graph_height(g)
+
+    bounds, _ = _build_graph_plane(g)
+
+    bottom, left, right, top, _, _ = _build_graph_key(g)
+    dx = left + right
+    dy = bottom + top
     network = Network(
         height=local_height + dy,
         width=local_width + dx,
@@ -587,10 +733,12 @@ def interact(g, path=None, physics=False):
         layout=None,
     )
 
-    dx = local_left - dx // 2
-    dy = local_top - dy // 2
+    pos = _build_graph_pos(g, bounds)
+
+    dx = left - dx // 2
+    dy = top - dy // 2
     for n in g.nodes:
-        x, y = _get_node_pos(g, n)
+        x, y = pos[n]
         size, style, color, bwidth, bcolor, _ = _build_node_key(g, n)
         color = _convert(color)
         bcolor = _convert(bcolor)
@@ -611,13 +759,13 @@ def interact(g, path=None, physics=False):
             },
             'label': ' ',
             'labelHighlightBold': False,
-            'physics': bool(physics),
+            'physics': physics,
             'shape': NODE_STYLES[style],
             'size': size // 2,
             'x': round((x - 0.5) * (0.9 * local_width - 24)) + dx,
             'y': round((0.5 - y) * (0.9 * local_height - 24)) + dy,
         }
-        label = g.nodes[n].get('label', None)
+        label = get_node_label(g, n)
         if label:
             options['title'] = label
         network.add_node(n, **options)
@@ -639,7 +787,7 @@ def interact(g, path=None, physics=False):
                 'selectionWidth': 0,
                 'width': width,
             }
-            label = g.edges[n, m].get('label', None)
+            label = get_edge_label(g, n, m)
             if label:
                 options['title'] = label
             network.add_edge(n, m, **options)
@@ -655,7 +803,16 @@ def interact(g, path=None, physics=False):
             os.mkdir(CACHE_DIR)
         path = os.path.join(CACHE_DIR, '{}.html'.format(id(g)))
     else:
-        path = str(path)
+        if not isinstance(path, str):
+            raise TypeError('interact path must be a string')
+        if not path.endswith('.html'):
+            raise ValueError('interact path must end with .html')
+        if os.path.exists(path):
+            access = os.access(path, os.W_OK)
+        else:
+            access = os.access(os.path.dirname(os.path.abspath(path)), os.W_OK)
+        if not access:
+            raise ValueError('interact path must have write permission')
 
     iframe = network.show(path)
 
@@ -667,7 +824,7 @@ def interact(g, path=None, physics=False):
 
 
 def draw(g, toolbar=False):
-    """Render a static visualization of a graph.
+    '''Render a static visualization of a graph.
 
     The visualization is powered by `Plotly <https://plot.ly/python/>`_, based
     on the :ref:`visual attributes <visual-attributes>`, completely consistent
@@ -683,19 +840,33 @@ def draw(g, toolbar=False):
     :type toolbar: bool
     :param toolbar: Whether to enable the toolbar. This is particularly useful for saving the
                     visualization to a PNG file.
-    """
-    local_width, local_height, local_bottom, local_left, local_right, local_top = _build_graph_key(g)
-    local_width += local_left + local_right
-    local_height += local_bottom + local_top
+    '''
+    if not isinstance(toolbar, bool):
+        raise TypeError('draw toolbar must be a boolean')
+
+    local_width = _build_graph_width(g)
+    local_height = _build_graph_height(g)
+
+    bounds, origin = _build_graph_plane(g)
+
+    bottom, left, right, top, awidth, acolor = _build_graph_key(g)
+    local_width += left + right
+    local_height += bottom + top
+    graph_trace = _build_graph_trace(g, origin, awidth, acolor)
+
+    pos = _build_graph_pos(g, bounds)
 
     node_traces = {}
-    node_label_trace = _build_node_label_trace(local_width, local_height, local_bottom, local_left, local_right, local_top)
+    node_label_trace = _build_node_label_trace(local_width, local_height, bottom, left, right, top)
+    node_black_trace = _build_node_extra_trace((0, 0, 0))
+    node_white_trace = _build_node_extra_trace((255, 255, 255))
     for n in g.nodes:
         size, style, color, bwidth, bcolor, labpos = _build_node_key(g, n)
         key = (size, style, color, bwidth, bcolor, labpos)
         if key not in node_traces:
-            node_traces[key] = _build_node_trace(size, style, color, bwidth, bcolor, labpos)
-        _add_node(g, n, node_traces[key])
+            node_traces[key] = _build_node_trace(size, style, color, bwidth, bcolor, labpos, False)
+        node_extra_trace = node_white_trace if _toodark(color) else node_black_trace
+        _add_node(g, n, pos, node_traces[key], node_extra_trace, labpos)
 
     edge_traces = {}
     edge_label_trace = _build_edge_label_trace()
@@ -707,10 +878,13 @@ def draw(g, toolbar=False):
             key = (width, style, color)
             if key not in edge_traces:
                 edge_traces[key] = _build_edge_trace(width, style, color)
-            _add_edge(g, n, m, edge_traces[key], edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
+            _add_edge(g, n, m, pos, edge_traces[key], edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
 
-    data = list(edge_traces.values())
+    data = [graph_trace]
+    data.extend(edge_traces.values())
     data.extend(node_traces.values())
+    data.append(node_white_trace)
+    data.append(node_black_trace)
     data.append(edge_label_trace)
     data.append(node_label_trace)
 
@@ -728,7 +902,7 @@ def draw(g, toolbar=False):
 
 
 class Animation:
-    """An Animation renders a dynamic visualization of a sequence of graphs.
+    '''An Animation renders a dynamic visualization of a sequence of graphs.
 
     The visualization is powered by `Plotly <https://plot.ly/python/>`_, based
     on the :ref:`visual attributes <visual-attributes>`, completely consistent
@@ -743,7 +917,7 @@ class Animation:
 
     :type height: int
     :param height: Animation height, in pixels. Must be positive.
-    """
+    '''
     def __init__(self, width=None, height=None):
         if width is not None:
             if not isinstance(width, int):
@@ -767,23 +941,31 @@ class Animation:
     def __exit__(self, type, value, traceback):
         self.play()
 
-    def _render(self, g, h, local_width, local_height):
-        local_bottom, local_left, local_right, local_top = _build_graph_padding(g)
-        local_width += local_left + local_right
-        local_height += local_bottom + local_top
+    def _render(self, g, h, local_width, local_height, bounds, origin):
+        bottom, left, right, top, awidth, acolor = _build_graph_key(g)
+        local_width += left + right
+        local_height += bottom + top
+        graph_trace = _build_graph_trace(g, origin, awidth, acolor)
+
+        gpos = _build_graph_pos(g, bounds)
+        hpos = _build_graph_pos(h, bounds)
 
         node_traces = []
-        node_label_trace = _build_node_label_trace(local_width, local_height, local_bottom, local_left, local_right, local_top)
+        node_label_trace = _build_node_label_trace(local_width, local_height, bottom, left, right, top)
+        node_extra_traces = []
         for n in h.nodes:
             if g.has_node(n):
                 size, style, color, bwidth, bcolor, labpos = _build_node_key(g, n)
-                node_trace = _build_node_trace(size, style, color, bwidth, bcolor, labpos)
-                _add_node(g, n, node_trace)
+                node_trace = _build_node_trace(size, style, color, bwidth, bcolor, labpos, False)
+                node_extra_trace = _build_node_extra_trace((255, 255, 255) if _toodark(color) else (0, 0, 0))
+                _add_node(g, n, gpos, node_trace, node_extra_trace, labpos)
             else:
                 size, style, _, bwidth, _, labpos = _build_node_key(h, n)
-                node_trace = _build_node_trace(size, style, (255, 255, 255, 0.0), bwidth, (255, 255, 255, 0.0), labpos)
-                _add_node(h, n, node_trace)
+                node_trace = _build_node_trace(size, style, (255, 255, 255, 0), bwidth, (255, 255, 255, 0), labpos, True)
+                node_extra_trace = _build_node_extra_trace((255, 255, 255, 0))
+                _add_node(h, n, hpos, node_trace, node_extra_trace, labpos)
             node_traces.append(node_trace)
+            node_extra_traces.append(node_extra_trace)
 
         edge_traces = []
         edge_label_trace = _build_edge_label_trace()
@@ -794,15 +976,17 @@ class Animation:
                 if g.has_edge(n, m):
                     n_size, m_size, width, style, color, labflip, labdist, labfrac = _build_edge_key(g, n, m)
                     edge_trace = _build_edge_trace(width, style, color)
-                    _add_edge(g, n, m, edge_trace, edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
+                    _add_edge(g, n, m, gpos, edge_trace, edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
                 else:
                     n_size, m_size, width, style, _, labflip, labdist, labfrac = _build_edge_key(h, n, m)
-                    edge_trace = _build_edge_trace(width, style, (255, 255, 255, 0.0))
-                    _add_edge(h, n, m, edge_trace, edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
+                    edge_trace = _build_edge_trace(width, style, (255, 255, 255, 0))
+                    _add_edge(h, n, m, hpos, edge_trace, edge_label_trace, local_width, local_height, n_size, m_size, labflip, labdist, labfrac)
                 edge_traces.append(edge_trace)
 
-        data = edge_traces
+        data = [graph_trace]
+        data.extend(edge_traces)
         data.extend(node_traces)
+        data.extend(node_extra_traces)
         data.append(edge_label_trace)
         data.append(node_label_trace)
 
@@ -813,18 +997,18 @@ class Animation:
         return frame
 
     def rec(self, g):
-        """Record a graph.
+        '''Record a graph.
 
         The method simply stores a copy of the graph. The original graph is not
         stored because it is expected to change after being recorded.
 
         :type g: NetworkX Graph or DiGraph
         :param g: The graph to record.
-        """
+        '''
         self.graphs.append(g.copy())
 
     def play(self):
-        """Play recorded graphs.
+        '''Play recorded graphs.
 
         If the animation constructor has been called with ``width=None``, checks
         if all recorded graphs have the same width. If they do, such width is
@@ -832,7 +1016,7 @@ class Animation:
         graph width is used. Same for ``height=None``.
 
         At least two graphs must have been recorded.
-        """
+        '''
         if len(self.graphs) < 2:
             raise ValueError('animation must have at least two recs')
 
@@ -858,10 +1042,13 @@ class Animation:
         if height is None:
             height = local_height
 
+        union = nx.disjoint_union_all(self.graphs)
+        bounds, origin = _build_graph_plane(union)
+
         frames = []
         for i, g in enumerate(self.graphs):
             if h is None:
-                frames.append(self._render(g, g, width, height))
+                frames.append(self._render(g, g, width, height, bounds, origin))
             else:
                 if g != last:
                     next = self.graphs[i + 1]
@@ -869,7 +1056,7 @@ class Animation:
                         h.nodes[n].update(next.nodes[n])
                     for n, m in next.edges:
                         h.edges[n, m].update(next.edges[n, m])
-                frames.append(self._render(g, h, width, height))
+                frames.append(self._render(g, h, width, height, bounds, origin))
 
         # parameters estimated from screenshots
         width = 1.05 * width + 72

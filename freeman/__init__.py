@@ -13,11 +13,11 @@ def _parse(value):
         line = value.strip()
         if line.startswith('rgb(') or line.startswith('rgba('):
             if not line.endswith(')'):
-                raise ValueError('rgb and rgba must end with ")"')
+                raise ValueError('rgb and rgba must end with \')\'')
             length = line.find('(')
             phrase = line[(length + 1):-1]
             if phrase.find('(') != -1 or phrase.find(')') != -1:
-                raise ValueError('rgb and rgba must have only one "(" and only one ")"')
+                raise ValueError('rgb and rgba must have only one \'(\' and only one \')\'')
 
             words = phrase.split(',')
             if len(words) != length:
@@ -45,13 +45,19 @@ def _parse(value):
 def load(path):
     g = nx.read_gml(path, 'id')
 
-    keys = list(g.graph.keys())
+    keys = list(g.graph)
     for key in keys:
         if key.startswith('node_'):
-            set_all_nodes(g, key[5:], g.graph[key])
+            suffix = key[5:]
+            for n in g.nodes:
+                if suffix not in g.nodes[n]:
+                    g.nodes[n][suffix] = g.graph[key]
             del g.graph[key]
         if key.startswith('edge_'):
-            set_all_edges(g, key[5:], g.graph[key])
+            suffix = key[5:]
+            for n, m in g.edges:
+                if suffix not in g.edges[n, m]:
+                    g.edges[n, m][suffix] = g.graph[key]
             del g.graph[key]
 
     for n in g.nodes:
@@ -141,11 +147,6 @@ def init(g):
     for n, x, y in zip(g.nodes, X, Y):
         g.nodes[n]['pos'] = (x, y)
 
-    normalize(g)
-
-    set_nodeframe(g)
-    set_edgeframe(g)
-
 
 def dyads(g, ordered=False):
     if ordered:
@@ -157,6 +158,25 @@ def triads(g, ordered=False):
     if ordered:
         return permutations(g.nodes, 3)
     return combinations(g.nodes, 3)
+
+
+def flip_existence(g, n, m):
+    if g.has_edge(n, m):
+        g.remove_edge(n, m)
+    else:
+        g.add_edge(n, m)
+
+
+def flip_direction(g, n, m):
+    if not isinstance(g, nx.DiGraph):
+        raise TypeError('graph must be directed')
+    if not g.has_edge(n, m):
+        raise ValueError('original edge must exist')
+    if g.has_edge(m, n):
+        raise ValueError('opposite edge must not exist')
+    g.add_edge(m, n)
+    g.edges[m, n].update(g.edges[n, m])
+    g.remove_edge(n, m)
 
 
 def set_each_node(g, key, map):
@@ -201,41 +221,19 @@ def unset_edges(g, key):
             del g.edges[n, m][key]
 
 
-def colorize_communities(g, C):
-    map = {}
-    for i, c in enumerate(C):
-        for n in c:
-            map[n] = i
-
-    colorize_nodes(g, map)
+def convert_nodes(g, source, target, map):
+    values = [map[g.nodes[n][source]] for n in g.nodes]
+    for n, value in zip(g.nodes, values):
+        g.nodes[n][target] = value
 
 
-def stack_and_track(graphs, targets=None):
-    nodes = set.intersection(*(set(g.nodes) for g in graphs))
-
-    if targets is None:
-        targets = nodes
-
-    h = nx.DiGraph()
-
-    for j, n in enumerate(nodes):
-        prev = None
-
-        for i, g in enumerate(graphs):
-            curr = i * len(nodes) + j
-
-            h.add_node(curr)
-            h.nodes[curr].update(g.nodes[n])
-
-            if prev is not None and n in targets:
-                h.add_edge(prev, curr)
-
-            prev = curr
-
-    return h
+def convert_edges(g, source, target, map):
+    values = [map[g.edges[n, m][source]] for n, m in g.edges]
+    for (n, m), value in zip(g.edges, values):
+        g.edges[n, m][target] = value
 
 
-def skin_seaborn(g):
+def skin_seaborn(g, nodes=[]):
     g.graph['width'] = 450
     g.graph['height'] = 450
     g.graph['bottom'] = 0
@@ -245,6 +243,8 @@ def skin_seaborn(g):
 
     set_all_nodes(g, 'size', 10)
     set_all_nodes(g, 'style', 'circle')
+    set_all_nodes(g, 'color', (76, 116, 172))
+    set_all_nodes(g, 'color', (219, 130, 87), lambda n: n not in nodes)
     set_all_nodes(g, 'bwidth', 0)
     set_all_nodes(g, 'labpos', 'hover')
 
@@ -266,12 +266,30 @@ def skin_pyvis(g):
     set_all_edges(g, 'color', (43, 124, 233))
 
 
+def concat_nodes(graphs, key):
+    dataframes = {}
+    for value, g in graphs.items():
+        df = g.nodeframe.copy()
+        df['node'] = g.nodes
+        dataframes[value] = df
+    return concat(dataframes, key)
+
+
+def concat_edges(graphs, key):
+    dataframes = {}
+    for value, g in graphs.items():
+        df = g.edgeframe.copy()
+        df['edge'] = g.edges
+        dataframes[value] = df
+    return concat(dataframes, key)
+
+
 class Graph(ObjectProxy):
-    def interact(self, path=None, physics=False):
-        """Object-oriented version of :func:`interact <freeman.drawing.interact>`."""
-        interact(self, path, physics)
+    def interact(self, physics=False, path=None):
+        '''Object-oriented wrapper for :func:`interact <freeman.drawing.interact>`.'''
+        interact(self, physics, path)
     def draw(self, toolbar=False):
-        """Object-oriented version of :func:`draw <freeman.drawing.draw>`."""
+        '''Object-oriented wrapper for :func:`draw <freeman.drawing.draw>`.'''
         draw(self, toolbar)
 
     def extract_nodes(self, map):
@@ -282,10 +300,16 @@ class Graph(ObjectProxy):
         label_nodes(self, map, ndigits)
     def label_edges(self, map=None, ndigits=2):
         label_edges(self, map, ndigits)
-    def colorize_nodes(self, map=None):
-        colorize_nodes(self, map)
-    def colorize_edges(self, map=None):
-        colorize_edges(self, map)
+    def color_borders(self, dark=0.5):
+        color_borders(self, dark)
+    def color_nodes(self, map=None, dark=0):
+        color_nodes(self, map, dark)
+    def color_edges(self, map=None, dark=0.5):
+        color_edges(self, map, dark)
+    def color_community_nodes(self, C, dark=0):
+        color_community_nodes(self, C, dark)
+    def color_community_edges(self, C, dark=0.5, alpha=0.5):
+        color_community_edges(self, C, dark, alpha)
     def scale_nodes_size(self, map, lower=None, upper=None):
         scale_nodes_size(self, map, lower, upper)
     def scale_edges_width(self, map, lower=None, upper=None):
@@ -294,10 +318,10 @@ class Graph(ObjectProxy):
         scale_nodes_dark(self, map, lower, upper, hue)
     def scale_edges_alpha(self, map, lower=None, upper=None, hue=None):
         scale_edges_alpha(self, map, lower, upper, hue)
-    def heat_nodes(self, map, lower=None, upper=None, middle=None):
-        heat_nodes(self, map, lower, upper, middle)
-    def heat_edges(self, map, lower=None, upper=None, middle=None):
-        heat_edges(self, map, lower, upper, middle)
+    def heat_nodes(self, map, lower=None, upper=None, middle=None, classic=False):
+        heat_nodes(self, map, lower, upper, middle, classic)
+    def heat_edges(self, map, lower=None, upper=None, middle=None, classic=False):
+        heat_edges(self, map, lower, upper, middle, classic)
 
     def scatter(self, xmap, ymap):
         scatter(self, xmap, ymap)
@@ -308,86 +332,92 @@ class Graph(ObjectProxy):
     def move_complement(self, key, *args, **kwargs):
         move_complement(self, key, *args, **kwargs)
 
-    def set_nodecol(self, col, map):
-        set_nodecol(self, col, map)
-    def set_edgecol(self, col, map):
-        set_edgecol(self, col, map)
+    def set_nodedata(self, key, map):
+        self.nodeframe[key] = list(extract_nodes(self, map))
+    def set_edgedata(self, key, map):
+        self.edgeframe[key] = list(extract_edges(self, map))
+    def assign_nodes(self, other, key):
+        assign(self.nodeframe, other.nodeframe, key)
+    def assign_edges(self, other, key):
+        assign(self.edgeframe, other.edgeframe, key)
     def distest_nodes(self, x):
-        return distest_nodes(self, x)
+        return distest(self.nodeframe, x)
     def distest_edges(self, x):
-        return distest_edges(self, x)
+        return distest(self.edgeframe, x)
     def cortest_nodes(self, x, y, max_perm=None):
-        return cortest_nodes(self, x, y, max_perm)
+        return cortest(self.nodeframe, x, y, max_perm)
     def cortest_edges(self, x, y, max_perm=None):
-        return cortest_edges(self, x, y, max_perm)
+        return cortest(self.edgeframe, x, y, max_perm)
     def chitest_nodes(self, x, y, max_perm=None):
-        return chitest_nodes(self, x, y, max_perm)
+        return chitest(self.nodeframe, x, y, max_perm)
     def chitest_edges(self, x, y, max_perm=None):
-        return chitest_edges(self, x, y, max_perm)
+        return chitest(self.edgeframe, x, y, max_perm)
     def reltest_nodes(self, a, b, max_perm=None):
-        return reltest_nodes(self, a, b, max_perm)
+        return reltest(self.nodeframe, a, b, max_perm)
     def reltest_edges(self, a, b, max_perm=None):
-        return reltest_edges(self, a, b, max_perm)
+        return reltest(self.edgeframe, a, b, max_perm)
     def mixtest_nodes(self, x, y, max_perm=None):
-        return mixtest_nodes(self, x, y, max_perm)
+        return mixtest(self.nodeframe, x, y, max_perm)
     def mixtest_edges(self, x, y, max_perm=None):
-        return mixtest_edges(self, x, y, max_perm)
+        return mixtest(self.edgeframe, x, y, max_perm)
     def linregress_nodes(self, X, y, *args, **kwargs):
-        return linregress_nodes(self, X, y, *args, **kwargs)
+        return linregress(self.nodeframe, X, y, *args, **kwargs)
     def linregress_edges(self, X, y, *args, **kwargs):
-        return linregress_edges(self, X, y, *args, **kwargs)
+        return linregress(self.edgeframe, X, y, *args, **kwargs)
     def logregress_nodes(self, X, y, *args, **kwargs):
-        return logregress_nodes(self, X, y, *args, **kwargs)
+        return logregress(self.nodeframe, X, y, *args, **kwargs)
     def logregress_edges(self, X, y, *args, **kwargs):
-        return logregress_edges(self, X, y, *args, **kwargs)
-    def intencode_nodes(self, col, order=None):
-        return intencode_nodes(self, col, order)
-    def intencode_edges(self, col, order=None):
-        return intencode_edges(self, col, order)
-    def binencode_nodes(self, col):
-        return binencode_nodes(self, col)
-    def binencode_edges(self, col):
-        return binencode_edges(self, col)
+        return logregress(self.edgeframe, X, y, *args, **kwargs)
+    def intencode_nodes(self, x, order=None):
+        return intencode(self.nodeframe, x, order)
+    def intencode_edges(self, x, order=None):
+        return intencode(self.edgeframe, x, order)
+    def binencode_nodes(self, x):
+        return binencode(self.nodeframe, x)
+    def binencode_edges(self, x):
+        return binencode(self.edgeframe, x)
     def displot_nodes(self, x):
-        displot_nodes(self, x)
+        displot(self.nodeframe, x)
     def displot_edges(self, x):
-        displot_edges(self, x)
+        displot(self.edgeframe, x)
     def barplot_nodes(self, x, control=None):
-        barplot_nodes(self, x, control)
+        barplot(self.nodeframe, x, control)
     def barplot_edges(self, x, control=None):
-        barplot_edges(self, x, control)
+        barplot(self.edgeframe, x, control)
     def linplot_nodes(self, x, y, control=None):
-        linplot_nodes(self, x, y, control)
+        linplot(self.nodeframe, x, y, control)
     def linplot_edges(self, x, y, control=None):
-        linplot_edges(self, x, y, control)
+        linplot(self.edgeframe, x, y, control)
     def scaplot_nodes(self, x, y, control=None):
-        scaplot_nodes(self, x, y, control)
+        scaplot(self.nodeframe, x, y, control)
     def scaplot_edges(self, x, y, control=None):
-        scaplot_edges(self, x, y, control)
+        scaplot(self.edgeframe, x, y, control)
     def matplot_nodes(self, X, control=None):
-        matplot_nodes(self, X, control)
+        matplot(self.nodeframe, X, control)
     def matplot_edges(self, X, control=None):
-        matplot_edges(self, X, control)
+        matplot(self.edgeframe, X, control)
     def valcount_nodes(self, x, order=None, transpose=False):
-        return valcount_nodes(self, x, order, transpose)
+        return valcount(self.nodeframe, x, order, transpose)
     def valcount_edges(self, x, order=None, transpose=False):
-        return valcount_edges(self, x, order, transpose)
+        return valcount(self.edgeframe, x, order, transpose)
     def contable_nodes(self, x, y):
-        return contable_nodes(self, x, y)
+        return contable(self.nodeframe, x, y)
     def contable_edges(self, x, y):
-        return contable_edges(self, x, y)
+        return contable(self.edgeframe, x, y)
+    def corplot_twomode(self, nodes, weight='weight'):
+        corplot_twomode(self, nodes, weight)
+    def analyze_to_move(self, nodes, weight='weight'):
+        analyze_to_move(self, nodes, weight)
     def corplot_nodes(self, x, y):
-        corplot_nodes(self, x, y)
+        corplot(self.nodeframe, x, y)
     def corplot_edges(self, x, y):
-        corplot_edges(self, x, y)
+        corplot(self.edgeframe, x, y)
     def boxplot_nodes(self, x, y, control=None):
-        boxplot_nodes(self, x, y, control)
+        boxplot(self.nodeframe, x, y, control)
     def boxplot_edges(self, x, y, control=None):
-        boxplot_edges(self, x, y, control)
+        boxplot(self.edgeframe, x, y, control)
     def girvan_newman(self):
         girvan_newman(self)
-    def corplot_graph(self, nodes, weight='weight', plot=True):
-        return corplot_graph(self, nodes, weight, plot)
 
     def __init__(self, g):
         super().__init__(g.copy())
@@ -396,6 +426,10 @@ class Graph(ObjectProxy):
         return dyads(self, ordered)
     def triads(self, ordered=False):
         return triads(self, ordered)
+    def flip_existence(self, n, m):
+        flip_existence(self, n, m)
+    def flip_direction(self, n, m):
+        flip_direction(self, n, m)
     def set_each_node(self, key, map):
         set_each_node(self, key, map)
     def set_each_edge(self, key, map):
@@ -408,10 +442,12 @@ class Graph(ObjectProxy):
         unset_nodes(self, key)
     def unset_edges(self, key):
         unset_edges(self, key)
-    def colorize_communities(self, C):
-        colorize_communities(self, C)
-    def skin_seaborn(self):
-        skin_seaborn(self)
+    def convert_nodes(self, source, target, map):
+        convert_nodes(self, source, target, map)
+    def convert_edges(self, source, target, map):
+        convert_edges(self, source, target, map)
+    def skin_seaborn(self, other=[]):
+        skin_seaborn(self, other)
     def skin_pyvis(self):
         skin_pyvis(self)
 
@@ -427,3 +463,17 @@ class Graph(ObjectProxy):
         return Graph(self.__wrapped__.edge_subgraph(edges))
     def reverse(self):
         return Graph(self.__wrapped__.reverse())
+
+    @property
+    def nodeframe(self):
+        if not hasattr(self, '_nodeframe'):
+            self._nodeframe = pd.DataFrame()
+        self._nodeframe = self._nodeframe.reindex(self.nodes, copy=False)
+        return self._nodeframe
+
+    @property
+    def edgeframe(self):
+        if not hasattr(self, '_edgeframe'):
+            self._edgeframe = pd.DataFrame()
+        self._edgeframe = self._edgeframe.reindex(self.edges, copy=False)
+        return self._edgeframe
