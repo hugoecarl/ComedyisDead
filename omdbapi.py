@@ -6,7 +6,7 @@ import json
 with open('test.json', 'w') as f:
     f.write("[")
 
-omdb.set_default('apikey', '2777e8dd')
+omdb.set_default('apikey', 'ca7ae7f8')
 
 for i in retorna_id():
     try:
@@ -15,9 +15,8 @@ for i in retorna_id():
             json.dump(a, f)
             f.write(",\n") 
     except:
-        f.write("]")    
+        f.write("]")
         f.close()
-    
 
 
 

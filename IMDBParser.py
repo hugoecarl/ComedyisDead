@@ -1,6 +1,6 @@
 import pandas as pd
 
-df = pd.read_csv("C:/Users/hugoc/Desktop/Insper/redess/ComedyisDead/dataim.tsv", sep='\t')
+df = pd.read_csv("C:/Users/hugoc/Desktop/dataim.tsv", sep='\t')
 df = df[df.startYear != "\\N"].astype({"startYear": int})
 df = df[(df.startYear > 1999) & (df.startYear < 2011) & (df.genres != "\\N")]
 df = df[(~df.genres.str.contains("Reality-TV")) & (~df.genres.str.contains("Sport")) & (~df.genres.str.contains("News")) & (~df.genres.str.contains("Talk-Show")) & (~df.genres.str.contains("Game-Show"))]
