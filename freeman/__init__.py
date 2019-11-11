@@ -1,4 +1,4 @@
-from random import random, uniform
+from random import uniform
 from wrapt import ObjectProxy
 
 from .drawing import *
@@ -40,6 +40,17 @@ def _parse(value):
                 return (r, g, b)
 
     return value
+
+
+def _burst(graphs, nodes, weight='weight'):
+    graphs = [g.copy() for g in graphs]
+
+    analyze_last_to_move_all(graphs, nodes, weight)
+
+    for g in graphs:
+        skin_seaborn(g, nodes)
+
+    return graphs
 
 
 def load(path):
@@ -129,7 +140,7 @@ def init(g):
             if X[i] is None:
                 X[i] = uniform(xmin, xmax)
     else:
-        X = [random() for x in X]
+        X = [uniform(-1, 1) for x in X]
 
     Ynum = [y for y in Y if y is not None]
     if Ynum:
@@ -142,7 +153,7 @@ def init(g):
             if Y[i] is None:
                 Y[i] = uniform(ymin, ymax)
     else:
-        Y = [random() for y in Y]
+        Y = [uniform(-1, 1) for y in Y]
 
     for n, x, y in zip(g.nodes, X, Y):
         g.nodes[n]['pos'] = (x, y)
@@ -158,6 +169,38 @@ def triads(g, ordered=False):
     if ordered:
         return permutations(g.nodes, 3)
     return combinations(g.nodes, 3)
+
+
+def nodes_where(g, filter):
+    return (n for n in g.nodes if filter(n))
+
+
+def nodes_with(g, **kwargs):
+    return nodes_where(g, lambda n: all(g.nodes[n][key] == value for key, value in kwargs.items()))
+
+
+def edges_where(g, filter):
+    return ((n, m) for n, m in g.edges if filter(n, m))
+
+
+def edges_with(g, **kwargs):
+    return edges_where(g, lambda n, m: all(g.edges[n, m][key] == value for key, value in kwargs.items()))
+
+
+def subgraph_where(g, filter):
+    return g.subgraph(g.nodes_where(filter))
+
+
+def subgraph_with(g, **kwargs):
+    return g.subgraph(g.nodes_with(**kwargs))
+
+
+def edge_subgraph_where(g, filter):
+    return g.edge_subgraph(g.edges_where(filter))
+
+
+def edge_subgraph_with(g, **kwargs):
+    return g.edge_subgraph(g.edges_with(**kwargs))
 
 
 def flip_existence(g, n, m):
@@ -240,6 +283,8 @@ def skin_seaborn(g, nodes=[]):
     g.graph['left'] = 0
     g.graph['right'] = 0
     g.graph['top'] = 0
+    g.graph['awidth'] = 1
+    g.graph['acolor'] = (135, 135, 138)
 
     set_all_nodes(g, 'size', 10)
     set_all_nodes(g, 'style', 'circle')
@@ -250,7 +295,7 @@ def skin_seaborn(g, nodes=[]):
 
     set_all_edges(g, 'width', 1)
     set_all_edges(g, 'style', 'solid')
-    set_all_edges(g, 'color', (135, 135, 138))
+    set_all_edges(g, 'color', (0, 0, 0))
     unset_edges(g, 'label')
 
 
@@ -282,6 +327,24 @@ def concat_edges(graphs, key):
         df['edge'] = g.edges
         dataframes[value] = df
     return concat(dataframes, key)
+
+
+def affiliation_animation(graphs, nodes, weight='weight', width=None, height=None):
+    graphs = _burst(graphs, nodes, weight)
+    a = Animation(width, height)
+    for g in graphs:
+        g.set_all_nodes('labpos', 'hover')
+        g.set_all_edges('color', (0, 0, 0, 0.0))
+        a.rec(g)
+    return a
+
+
+def affiliation_tracking(graphs, nodes, weight='weight', subjects=[]):
+    graphs = _burst(graphs, nodes, weight)
+    g = stack_and_track(graphs, subjects)
+    g.graph['awidth'] = 1
+    g.graph['acolor'] = (135, 135, 138)
+    return Graph(g)
 
 
 class Graph(ObjectProxy):
@@ -426,6 +489,22 @@ class Graph(ObjectProxy):
         return dyads(self, ordered)
     def triads(self, ordered=False):
         return triads(self, ordered)
+    def nodes_where(self, filter):
+        return nodes_where(self, filter)
+    def nodes_with(self, **kwargs):
+        return nodes_with(self, **kwargs)
+    def edges_where(self, filter):
+        return edges_where(self, filter)
+    def edges_with(self, **kwargs):
+        return edges_with(self, **kwargs)
+    def subgraph_where(self, filter):
+        return Graph(subgraph_where(self, filter))
+    def subgraph_with(self, **kwargs):
+        return Graph(subgraph_with(self, **kwargs))
+    def edge_subgraph_where(self, filter):
+        return Graph(edge_subgraph_where(self, filter))
+    def edge_subgraph_with(self, **kwargs):
+        return Graph(edge_subgraph_with(self, **kwargs))
     def flip_existence(self, n, m):
         flip_existence(self, n, m)
     def flip_direction(self, n, m):
